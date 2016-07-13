@@ -562,13 +562,25 @@ class StrictRedisCluster(StrictRedis):
         Cluster impl:
             Result from SCAN is different in cluster mode.
         """
-        cursor = '0'
-        while cursor != 0:
-            for _, node_data in self.scan(cursor=cursor, match=match, count=count).items():
-                cursor, data = node_data
 
-                for item in data:
-                    yield item
+        cursors = {}
+        master_count = 0
+        for master_node in self.connection_pool.nodes.all_masters():
+            cursors[master_node["name"]] = '0'
+            master_count += 1
+
+        while (sum(cursors[_] == 0 for _ in cursors)) != master_count:
+            for node in cursors:
+                if(cursors[node] == 0):
+                    continue
+                # This should run in specified node instead all nodes
+                for _, node_data in self.scan(cursor=cursors[node], match=match, count=count).items():
+                    cursor, data = node_data
+                    if(_ == node):
+                        cursors[_] = cursor
+
+                    for item in data:
+                        yield item
 
     def mget(self, keys, *args):
         """
